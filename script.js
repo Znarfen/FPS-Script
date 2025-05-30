@@ -4,8 +4,13 @@
 //        A 2.5d FPS game
 // ---------------------------------------
 
+const debug = true;
+
 const canvas = document.getElementById("canvas")
 const pen = canvas.getContext("2d");
+
+const wallTexture1 = new Image();
+wallTexture1.src = "textures/walls/wallTexture1.png"
 
 const width = canvas.width;
 const height = canvas.height;
@@ -13,17 +18,19 @@ const height = canvas.height;
 const fps = 30;
 
 const layout = [
-    1, 0, 0, 0, 0, 0, 0, 1,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 1, 0, 0, 1, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 1, 0, 0, 1, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    1, 0, 0, 0, 0, 0, 0, 1,
+    1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 2, 0, 0, 1, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 1, 0, 0, 2, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
 ]
 
-const layoutWidth = 8;
+const layoutWidth = 10;
 
 const tileSize = 64;
 
@@ -36,6 +43,10 @@ const player = {
     fov: Math.PI / 3
 }
 
+function getTile(x, y) {
+    return (Math.floor(x / tileSize) + Math.floor(y / tileSize) * layoutWidth)
+}
+
 function atMap(x, y) {
     return layout[y * layoutWidth + x];
 }
@@ -45,51 +56,112 @@ function atMap(x, y) {
 // ---------------------------------------
 
 function castSingleRay(rayAngle) {
-  const sin = Math.sin(rayAngle);
-  const cos = Math.cos(rayAngle);
+    const sin = Math.sin(rayAngle);
+    const cos = Math.cos(rayAngle);
 
-  let distance = 0;
-  let hit = false;
+    const stepSize = 1;
+    let distance = 0;
 
-  while (!hit && distance < 1000) {
-    distance += 1;
+    let hitX = 0;
+    let hitY = 0;
+    let hitVertical = false;
+    let mapValue = 0;
+    let side = '';
 
-    const testX = Math.floor((player.x + cos * distance) / tileSize);
-    const testY = Math.floor((player.y + sin * distance) / tileSize);
+    while (distance < 1000) {
+        const rayX = player.x + cos * distance;
+        const rayY = player.y + sin * distance;
 
-    // Check if out of bounds
-    if (testX < 0 || testX >= layoutWidth || testY < 0 || testY >= layoutWidth) {
-      hit = true;
-      //distance = 0;
-    } else if (atMap(testX, testY) === 1) {
-      hit = true;
+        const tileX = Math.floor(rayX / tileSize);
+        const tileY = Math.floor(rayY / tileSize);
+
+        if (
+            tileX < 0 || tileX >= layoutWidth ||
+            tileY < 0 || tileY >= layoutWidth
+        ) {
+            break;
+        }
+
+        mapValue = atMap(tileX, tileY);
+        if (mapValue !== 0) {
+            hitX = rayX;
+            hitY = rayY;
+
+            if (Math.abs(cos) > Math.abs(sin)) {
+                // Vertical wall (E or W)
+                side = cos > 0 ? 'E' : 'W';
+            } else {
+                // Horizontal wall (N or S)
+                side = sin > 0 ? 'S' : 'N';
+            }
+            break;
+        }
+
+        distance += stepSize;
     }
-  }
 
-  return distance;
+    return {
+        distance,
+        at: mapValue,
+        hitX,
+        hitY,
+        side
+    };
 }
 
-// raycasting or light sim
+// raycasting or light emulator
 function lightRay() {
     const stepAngle = player.fov / canvas.width;
-    const lightning = 3000;
 
     for (let i = 0; i < canvas.width; i++) {
         const rayAngle = player.angle - (player.fov / 2) + i * stepAngle;
+        
+        const singleRay = castSingleRay(rayAngle);
 
-        const distance = castSingleRay(rayAngle);
+        const distance = singleRay.distance;
         const wallHeight = (tileSize * 320) / distance;
+        
+        const light = Math.min(tileSize * 100/distance, 100);
 
-        pen.fillStyle = 'rgb(' + lightning / distance + ',' + lightning / distance + ',' + lightning / distance + ')'
-        pen.fillRect(i, (canvas.height / 2) - (wallHeight / 2), 1, wallHeight)
+        let texture = wallTexture1;
+        let hitOffset;
+
+        pen.filter = 'brightness(' + light + '%)'
+
+        if (i % 2) hitOffset = singleRay.hitY % tileSize;
+        else hitOffset = singleRay.hitX % tileSize;
+
+        const sliceWidth = 3; // Instead of 1
+
+        if (singleRay.side == 'W' || singleRay.side == 'N') {
+            pen.drawImage(
+                texture,
+                Math.floor((hitOffset / tileSize) * texture.width) + sliceWidth, 0,
+                1, texture.height,
+                i + sliceWidth, (canvas.height / 2) - (wallHeight / 2),
+                sliceWidth, wallHeight
+            );
+        }
+        else {
+            pen.drawImage(
+                texture,
+                Math.floor((hitOffset / tileSize) * texture.width) - sliceWidth, 0,
+                1, texture.height,
+                i + sliceWidth, (canvas.height / 2) - (wallHeight / 2),
+                sliceWidth, wallHeight
+            );
+        }
+
+        pen.filter = 'none';
+        //i += sliceWidth - 1; // Skip ahead so you don’t draw overlapping columns
+
+
     }
 }
 
 // ---------------------------------------
 //          End of Ray Traising
 // ---------------------------------------
-
-
 
 // ---------------------------------------
 //          Player movment
@@ -101,7 +173,7 @@ function move(x, y) {
 
     if (
         (xNext > 0 && yNext > 0 && xNext < mapSize && yNext < mapSize) && // <- check out of bounds
-        (true)
+        (layout[getTile(xNext, yNext)] === 0)
     ) {
         player.x = xNext;
         player.y = yNext;
@@ -167,7 +239,7 @@ function miniMap() {
     // Draw walls
     pen.fillStyle = 'black';
     for (let i = 0; i < layout.length; i++) {
-        if (layout[i] === 1) {
+        if (layout[i] != 0) {
             pen.fillRect(
                 (i % layoutWidth) * scale,
                 Math.floor(i / layoutWidth) * scale,
@@ -202,9 +274,10 @@ setInterval(() => {
 
     lightRay();
 
-    miniMap();
-
-    console.log(player.x, player.y, player.angle)
+    if (debug) {
+        miniMap();
+        //console.log(player.x, player.y, player.angle)
+    }
 
 }, 1000 / fps);
 
