@@ -4,13 +4,20 @@
 //        A 2.5d FPS game
 // ---------------------------------------
 
+// ---------------------------------------
+//          Game Setup (var)
+// ---------------------------------------
+
 const debug = true;
 
 const canvas = document.getElementById("canvas")
 const pen = canvas.getContext("2d");
+pen.imageSmoothingEnabled = false;
 
-const wallTexture1 = new Image();
+const wallTexture1 = new Image(), wallTexture2 = new Image();
 wallTexture1.src = "textures/walls/wallTexture1.png"
+wallTexture2.src = "textures/walls/wallTexture2.png"
+
 
 const width = canvas.width;
 const height = canvas.height;
@@ -18,16 +25,16 @@ const height = canvas.height;
 const fps = 30;
 
 const layout = [
-    1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 2, 0, 0, 1, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 1, 0, 0, 2, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-    1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
-    1, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 0, 0, 0, 2, 0, 2, 0, 0, 0,
+    0, 0, 0, 0, 2, 0, 2, 0, 0, 0,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 0, 0, 2, 0, 2, 0, 0, 0,
+    1, 1, 0, 0, 2, 0, 2, 0, 0, 0,
+    1, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
 ]
 
 const layoutWidth = 10;
@@ -40,7 +47,117 @@ const player = {
     x: 100,
     y: 100,
     angle: 0,
-    fov: Math.PI / 3
+    fov: Math.PI / 3,
+    health: 100
+}
+
+const entetys = [
+    {
+        type: "spider",
+        x: 350,
+        y: 500,
+        health: 2,
+        hostile: true,
+        alive: true
+    },
+    {
+        type: "spider",
+        x: 550,
+        y: 200,
+        health: 2,
+        hostile: true,
+        alive: true
+    }
+]
+
+let frameInfo = {
+    frame: 0,
+    animationFrame: 0,
+    pic: 1,
+};
+
+// ---------------------------------------
+//          End of Game Setup (var)
+// ---------------------------------------
+
+function getDistance(entety1, entety2) {
+    const dx = entety1.x - entety2.x;
+    const dy = entety1.y - entety2.y;
+    return distance = Math.sqrt(dx * dx + dy * dy);
+}
+
+function getWallTexture(index) {
+    const wallTexture = new Image()
+    wallTexture.src = "textures/walls/wallTexture" + index + ".png"
+    return wallTexture
+}
+
+function hitPlayer(dmg, attackLength = 30) {
+    if (frameInfo.frame % attackLength == 0) {
+        player.health += -dmg;
+        pen.fillStyle = 'rgb(255, 0, 0)'
+        pen.fillRect(0, 0, canvas.width, canvas.height);
+    }
+}
+
+function renderEntetys() {
+    const entetyTexture = new Image();
+    let light;
+    
+    for (const entety of entetys) {
+        if (entety.health <= 0) continue;
+
+        const dx = entety.x - player.x;
+        const dy = entety.y - player.y;
+        const distance = getDistance(entety, player);
+
+        // Sprite prop.
+        let spriteSize = (tileSize * 320) / distance;
+        let spriteTop = (canvas.height / 2) - spriteSize / 5;
+
+        entetyTexture.src = "textures/entetys/" + entety.type + "/" + frameInfo.pic + ".png";
+
+        // Movment for entetys and entety behaviour
+        const speed = 1;
+        switch (entety.type) {
+            case 'spider':
+                // Move spider towards player
+                spriteSize += -20;
+                if (distance > 30) {
+                    move(entety, (-dx / distance) * speed, (-dy / distance) * speed);
+                    light = Math.min(tileSize * 100/distance, 100);
+                }
+                else {
+                    // Bite player
+                    hitPlayer(10);
+                }
+                break;
+        
+            default:
+                break;
+        }
+
+        const angle = (Math.atan2(dy, dx) - player.angle) % (Math.PI*2);
+
+        // No render if not see entety
+        if (angle < -player.fov / 2 || angle > player.fov / 4) continue;
+
+        // Not see enteties in walls
+        const singleRay = castSingleRay(player.angle + angle);
+        if (singleRay.distance < distance) continue;
+
+        const screenX = (canvas.width / 2) * (1 + Math.tan(angle) / Math.tan(player.fov / 2));
+    
+        pen.filter = 'brightness(' + light + '%)'
+        pen.drawImage(
+            entetyTexture,
+            screenX - spriteSize / 2,
+            spriteTop,
+            spriteSize,
+            spriteSize
+        );
+        pen.filter = 'none';
+    };
 }
 
 function getTile(x, y) {
@@ -113,6 +230,7 @@ function castSingleRay(rayAngle) {
 function lightRay() {
     const stepAngle = player.fov / canvas.width;
 
+    // render entier scren
     for (let i = 0; i < canvas.width; i++) {
         const rayAngle = player.angle - (player.fov / 2) + i * stepAngle;
         
@@ -120,42 +238,42 @@ function lightRay() {
 
         const distance = singleRay.distance;
         const wallHeight = (tileSize * 320) / distance;
-        
-        const light = Math.min(tileSize * 100/distance, 100);
 
-        let texture = wallTexture1;
-        let hitOffset;
+        if (singleRay.at != 0) {
 
-        pen.filter = 'brightness(' + light + '%)'
+            let texture = getWallTexture(singleRay.at);
+            let hitOffset;
 
-        if (i % 2) hitOffset = singleRay.hitY % tileSize;
-        else hitOffset = singleRay.hitX % tileSize;
+            // fog ish
+            pen.filter = 'brightness(' + Math.min(tileSize * 100/distance, 100) + '%)'
 
-        const sliceWidth = 3; // Instead of 1
+            if (i % 2) hitOffset = singleRay.hitY % tileSize;
+            else hitOffset = singleRay.hitX % tileSize;
 
-        if (singleRay.side == 'W' || singleRay.side == 'N') {
-            pen.drawImage(
-                texture,
-                Math.floor((hitOffset / tileSize) * texture.width) + sliceWidth, 0,
-                1, texture.height,
-                i + sliceWidth, (canvas.height / 2) - (wallHeight / 2),
-                sliceWidth, wallHeight
-            );
+            const sliceWidth = 3;
+
+            if (singleRay.side == 'W' || singleRay.side == 'N') {
+                pen.drawImage(
+                    texture,
+                    Math.floor((hitOffset / tileSize) * texture.width) + sliceWidth, 0,
+                    1, texture.height,
+                    i + sliceWidth, (canvas.height / 2) - (wallHeight / 2),
+                    sliceWidth, wallHeight
+                );
+            }
+            else {
+                pen.drawImage(
+                    texture,
+                    Math.floor((hitOffset / tileSize) * texture.width) - sliceWidth, 0,
+                    1, texture.height,
+                    i + sliceWidth, (canvas.height / 2) - (wallHeight / 2),
+                    sliceWidth, wallHeight
+                );
+            }
+
+            pen.filter = 'none';
+
         }
-        else {
-            pen.drawImage(
-                texture,
-                Math.floor((hitOffset / tileSize) * texture.width) - sliceWidth, 0,
-                1, texture.height,
-                i + sliceWidth, (canvas.height / 2) - (wallHeight / 2),
-                sliceWidth, wallHeight
-            );
-        }
-
-        pen.filter = 'none';
-        //i += sliceWidth - 1; // Skip ahead so you don’t draw overlapping columns
-
-
     }
 }
 
@@ -164,32 +282,65 @@ function lightRay() {
 // ---------------------------------------
 
 // ---------------------------------------
-//          Player movment
+//          Movment and Events
 // ---------------------------------------
 
-function move(x, y) {
-    let xNext = player.x + x;
-    let yNext = player.y + y;
+function move(entety, x, y) {
+    let xNext = entety.x + x;
+    let yNext = entety.y + y;
 
+    // Check out of bounds
     if (
-        (xNext > 0 && yNext > 0 && xNext < mapSize && yNext < mapSize) && // <- check out of bounds
+        (xNext > 0 && yNext > 0 && xNext < mapSize && yNext < mapSize) &&
         (layout[getTile(xNext, yNext)] === 0)
     ) {
-        player.x = xNext;
-        player.y = yNext;
+        entety.x = xNext;
+        entety.y = yNext;
     }
 }
 
-// Mouse poiner locked at screan
+function shoot() {
+  let theEnemy = null;
+  let closestDistance = Infinity;
+
+  for (const enemy of entetys) {
+    if (enemy.health <= 0 || !enemy.hostile) continue;
+
+    const dx = enemy.x - player.x;
+    const dy = enemy.y - player.y;
+    const distance = getDistance(enemy, player);
+
+    const angleToEnemy = Math.atan2(dy, dx);
+    
+    let angleDiff = angleToEnemy - player.angle;
+
+    // Check if within a small angle range (aim tolerance)
+    if (Math.abs(angleDiff) < 0.1) {
+        theEnemy = enemy;
+    }
+  }
+
+  pen.fillStyle = 'rgb(255, 255, 255)'
+  pen.fillRect(0, 0, canvas.width, canvas.height)
+
+  // If hit
+  if (theEnemy) {
+    theEnemy.health--;
+    move(theEnemy, (theEnemy.x - player.x) * 0.3, (theEnemy.y - player.y) * 0.3);
+  }
+}
+
 canvas.addEventListener('click', () => {
   canvas.requestPointerLock();
+  shoot();
 });
 
 // Change direction with mouse
 document.addEventListener('mousemove', e => {
     if (document.pointerLockElement === canvas) {
-        const sensitivity = 0.002; // adjust for speed
+        const sensitivity = 0.002;
         player.angle += e.movementX * sensitivity;
+        player.angle = (player.angle + Math.PI * 2) % (Math.PI * 2);
     }
 });
 
@@ -199,19 +350,19 @@ document.addEventListener('keydown', e => {
 
     switch (e.key) {
         case 'w':
-            move(+Math.cos(player.angle) * speed, +Math.sin(player.angle) * speed);
+            move(player, +Math.cos(player.angle) * speed, +Math.sin(player.angle) * speed);
             break;
 
         case 's':
-            move(-Math.cos(player.angle) * speed, -Math.sin(player.angle) * speed);
+            move(player, -Math.cos(player.angle) * speed, -Math.sin(player.angle) * speed);
             break;
     
         case 'a':
-            move(+Math.sin(player.angle) * speed, -Math.cos(player.angle) * speed);
+            move(player, +Math.sin(player.angle) * speed, -Math.cos(player.angle) * speed);
             break;
 
         case 'd':
-            move(-Math.sin(player.angle) * speed, +Math.cos(player.angle) * speed);
+            move(player, -Math.sin(player.angle) * speed, +Math.cos(player.angle) * speed);
             break;
 
         default:
@@ -220,13 +371,11 @@ document.addEventListener('keydown', e => {
 });
 
 // ---------------------------------------
-//          End of Player movment
+//          End of Movment
 // ---------------------------------------
 
-
-
 // ---------------------------------------
-//          Mini-Map
+//          UI
 // ---------------------------------------
 
 function miniMap() {
@@ -247,8 +396,20 @@ function miniMap() {
         }
     }
 
+    
+    for (const entety of entetys) {
+        if (entety.health > 0) pen.fillStyle = 'rgb(18, 150, 16)';
+        else pen.fillStyle = 'rgb(150, 16, 16)';
+
+        pen.fillRect(
+            (entety.x / tileSize) * scale - 1,
+            (entety.y / tileSize) * scale - 1,
+            2, 2
+        );
+    }
+
     // Draw player as a small rectangle on the minimap
-    pen.fillStyle = 'rgb(119, 0, 0)';
+    pen.fillStyle = 'rgb(0, 6, 171)';
     pen.fillRect(
         (player.x / tileSize) * scale - 1,
         (player.y / tileSize) * scale - 1,
@@ -256,8 +417,13 @@ function miniMap() {
     );
 }
 
+function userInterface() {
+    pen.fillStyle = 'rgb(167, 164, 14)';
+    pen.font = "15px Courier";
+    pen.fillText("Health: " + player.health, canvas.width - 105, 15);
+}
 // ---------------------------------------
-//          End of Mini-Map
+//          End of UI
 // ---------------------------------------
 
 
@@ -267,16 +433,25 @@ function miniMap() {
 // ---------------------------------------
 
 setInterval(() => {
-    pen.fillStyle = 'rgb(0, 0, 0)'
-    pen.fillRect(0, 0, width, height)
-    
-    
+    if (player.health > 0) {
 
-    lightRay();
+        pen.fillStyle = 'rgb(0, 0, 0)'
+        pen.fillRect(0, 0, width, height)
+        frameInfo.frame++;
+        frameInfo.animationFrame++;
+        if (frameInfo.animationFrame > 4) {
+            if (frameInfo.pic == 1) frameInfo.pic = 2;
+            else frameInfo.pic = 1;
+            frameInfo.animationFrame = 0;
+        }
 
-    if (debug) {
-        miniMap();
-        //console.log(player.x, player.y, player.angle)
+        lightRay();
+        renderEntetys();
+    
+        if (debug) {
+            miniMap();
+        }
+        userInterface();
     }
 
 }, 1000 / fps);
